@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <style>
+        /* In order to place the tracking correctly */
+
+        canvas.drawing,
+        canvas.drawingBuffer {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+    </style>
+    <title>TABCOACWNA</title>
+</head>
+
+<body>
+
+    <h1>TABCOACWNA</h1>
+    <div id="barcode-reader" style="position:relative">
+        <img id="barcode-image" />
+    </div>
+    <button onclick="capture()">Capture</button>
+
+    <div class="product-container">
+        <h2>Book details</h2>
+        <div class="detail">ISBN:
+            <span id="ISBN"></span>
+        </div>
+        <div class="detail">Google API Index:
+            <span id="Index"></span>
+        </div>
+        <div class="detail">Title:
+            <span id="Title"></span>
+        </div>
+        <div class="detail">Author:
+            <span id="Author"></span>
+        </div>
+        <div class="detail">PageCount:
+            <span id="PageCount"></span>
+        </div>
+        <div class="detail">PublishYear:
+            <span id="PublishYear"></span>
+        </div>
+        <div class="detail">Genre:
+            <span id="Genre"></span>
+        </div>
+        <button onclick="next()">Wrong book?</button>
+    </div>
+
+    <div>Start date:
+        <input type="date" name="start" />
+    </div>
+    <div>End date:
+        <input type="date" name="end" />
+    </div>
+    <button>Update</button>
+
+    <script src="https://cdn.rawgit.com/serratus/quaggaJS/0420d5e0/dist/quagga.min.js"></script>
+    <script>
+        var _isCapturing = false;
+        function capture() {
+            if (!_isCapturing) {
+                _isCapturing = true;
+                document.getElementById("barcode-image").src = "";
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector("#barcode-reader")
+                    },
+                    decoder: {
+                        readers: ["ean_reader"]
+                    }
+                }, function (err) {
+                    if (err) {
+                        console.log(err);
+                        return
+                    }
+                    console.log("Initialization finished. Ready to start");
+                    document.getElementsByTagName("video")[0].style.display = "initial";
+                    Quagga.start();
+                });
+            } else {
+                Quagga.stop();
+                _isCapturing = false;
+            }
+        }
+
+        Quagga.onDetected(function (result) {
+            var canvas = Quagga.canvas.dom.image;
+            getBookDetails(result.codeResult.code, 0);
+            document.getElementById("ISBN").innerHTML = result.codeResult.code;
+            document.getElementById("barcode-image").src = canvas.toDataURL();
+            document.getElementsByTagName("video")[0].style.display = "none";
+            _isCapturing = false;
+            Quagga.stop();
+        });
+
+        Quagga.onProcessed(function (result) {
+            var drawingCtx = Quagga.canvas.ctx.overlay,
+                drawingCanvas = Quagga.canvas.dom.overlay;
+
+            if (result) {
+                if (result.boxes) {
+                    drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                    result.boxes.filter(function (box) {
+                        return box !== result.box;
+                    }).forEach(function (box) {
+                        Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "green", lineWidth: 2 });
+                    });
+                }
+
+                if (result.box) {
+                    Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "#00F", lineWidth: 2 });
+                }
+
+                if (result.codeResult && result.codeResult.code) {
+                    Quagga.ImageDebug.drawPath(result.line, { x: "x", y: "y" }, drawingCtx, { color: "red", lineWidth: 3 });
+                }
+            }
+        });
+
+        function getBookDetails(isbn, index) {
+            var query = "https://www.googleapis.com/books/v1/volumes?q=isbn:" + isbn;
+            var xmlhttp = new XMLHttpRequest();
+
+            xmlhttp.onreadystatechange = function () {
+                if (this.readyState == 4 && this.status == 200) {
+                    var book = JSON.parse(this.responseText);
+                    var bookIndex = index % book.totalItems;
+                    document.getElementById("Index").innerHTML = bookIndex;
+                    document.getElementById("Title").innerHTML = book.items[bookIndex]["volumeInfo"]["title"];
+                    document.getElementById("Author").innerHTML = book.items[bookIndex]["volumeInfo"]["authors"];
+                    document.getElementById("PageCount").innerHTML = book.items[bookIndex]["volumeInfo"]["pageCount"];
+                    document.getElementById("PublishYear").innerHTML = book.items[bookIndex]["volumeInfo"]["publishedDate"];
+                    document.getElementById("Genre").innerHTML = book.items[bookIndex]["volumeInfo"]["categories"];
+                }
+            };
+            xmlhttp.open("GET", query, true);
+            xmlhttp.send();
+        }
+
+        function next() {
+            var index = document.getElementById("Index").innerHTML;
+            var isbn = document.getElementById("ISBN").innerHTML;
+            var newIndex = parseInt(index) + 1;
+            getBookDetails(isbn, newIndex);
+        }
+    </script>
+</body>
+
+</html>
